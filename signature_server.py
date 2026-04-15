@@ -8,17 +8,29 @@ from openpyxl.drawing.image import Image as XLImage
 from PIL import Image
 
 app = Flask(__name__)
-CORS(app)
+CORS(app)  # разрешает все CORS-запросы, включая preflight
 
 EXCEL_FILE = "template.xlsx"
 
-@app.route('/save_signature', methods=['POST'])
+@app.route('/', methods=['GET'])
+def root():
+    return jsonify({'status': 'ok', 'message': 'Server is running'})
+
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({'status': 'ok'})
+
+@app.route('/save_signature', methods=['POST', 'OPTIONS'])
 def save_signature():
+    if request.method == 'OPTIONS':
+        # Автоматически обрабатывается CORS, но для уверенности
+        return jsonify({}), 200
+
     try:
         data = request.json
         image_data = data.get('signature')
         if not image_data:
-            return jsonify({'error': 'Нет изображения'}), 400
+            return jsonify({'error': 'No image'}), 400
 
         if ',' in image_data:
             image_data = image_data.split(',')[1]
@@ -39,7 +51,7 @@ def save_signature():
         png_io.seek(0)
 
         if not os.path.exists(EXCEL_FILE):
-            return jsonify({'error': f'Файл {EXCEL_FILE} не найден'}), 404
+            return jsonify({'error': f'File {EXCEL_FILE} not found'}), 404
 
         wb = load_workbook(EXCEL_FILE)
         ws = wb.active
@@ -49,13 +61,9 @@ def save_signature():
         ws.add_image(xl_img, "F49")
         wb.save(EXCEL_FILE)
 
-        return jsonify({'status': 'ok', 'message': 'Подпись добавлена'})
+        return jsonify({'status': 'ok'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
-@app.route('/health', methods=['GET'])
-def health():
-    return jsonify({'status': 'ok'})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
