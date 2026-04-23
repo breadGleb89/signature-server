@@ -1,6 +1,9 @@
 import os
 import base64
 import uuid
+import threading
+import requests
+import time
 from io import BytesIO
 from datetime import datetime
 from flask import Flask, request, jsonify, send_file
@@ -13,25 +16,24 @@ CORS(app)
 SIGNATURES_FOLDER = "signatures"
 os.makedirs(SIGNATURES_FOLDER, exist_ok=True)
 
-# Время жизни подписи в секундах (5 минут)
-SIGNATURE_TTL = 300
+# Keep-alive функция
+def keep_alive():
+    url = "https://signature-server-87mz.onrender.com/health"
+    while True:
+        time.sleep(600)  # 10 минут
+        try:
+            requests.get(url, timeout=5)
+            print("✅ Keep-alive ping отправлен")
+        except:
+            print("❌ Ошибка пинга")
 
-def cleanup_old_signatures():
-    """Удаляет старые подписи (старше 5 минут)"""
-    now = datetime.now().timestamp()
-    for filename in os.listdir(SIGNATURES_FOLDER):
-        filepath = os.path.join(SIGNATURES_FOLDER, filename)
-        if os.path.getmtime(filepath) < now - SIGNATURE_TTL:
-            os.remove(filepath)
-            print(f"🗑️ Удалена старая подпись: {filename}")
+# Запускаем keep-alive в фоне
+threading.Thread(target=keep_alive, daemon=True).start()
 
 @app.route('/save_signature', methods=['POST', 'OPTIONS'])
 def save_signature():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
-    
-    # Очищаем старые подписи
-    cleanup_old_signatures()
     
     try:
         data = request.json
@@ -41,7 +43,6 @@ def save_signature():
         if not image_data:
             return jsonify({'error': 'No image'}), 400
         
-        # Декодируем base64
         if ',' in image_data:
             base64_data = image_data.split(',')[1]
         else:
@@ -49,13 +50,9 @@ def save_signature():
         
         image_bytes = base64.b64decode(base64_data)
         
-        # Оптимизируем изображение
         img = Image.open(BytesIO(image_bytes))
-        
-        # Уменьшаем размер для экономии места
         img.thumbnail((300, 150), Image.Resampling.LANCZOS)
         
-        # Конвертируем в RGB
         if img.mode in ('RGBA', 'LA', 'P'):
             background = Image.new('RGB', img.size, (255, 255, 255))
             if img.mode == 'P':
@@ -68,23 +65,18 @@ def save_signature():
         elif img.mode != 'RGB':
             img = img.convert('RGB')
         
-        # Сохраняем во временный файл
         unique_id = str(uuid.uuid4())[:8]
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"signature_{user_id}_{timestamp}_{unique_id}.jpg"
         filepath = os.path.join(SIGNATURES_FOLDER, filename)
         img.save(filepath, 'JPEG', quality=70, optimize=True)
         
-        # Формируем URL
         base_url = os.environ.get('BASE_URL', 'https://signature-server-87mz.onrender.com')
         image_url = f"{base_url}/get_signature/{filename}"
-        
-        print(f"✅ Подпись сохранена: {filename}, размер: {os.path.getsize(filepath)} байт")
         
         return jsonify({'status': 'ok', 'url': image_url})
         
     except Exception as e:
-        print(f"❌ Ошибка: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/get_signature/<filename>', methods=['GET'])
