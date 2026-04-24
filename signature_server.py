@@ -14,11 +14,10 @@ from PIL import Image
 app = Flask(__name__)
 CORS(app)
 
+# Папки для хранения
 SIGNATURES_FOLDER = "signatures"
-os.makedirs(SIGNATURES_FOLDER, exist_ok=True)
-
-# Новая папка для данных форм
 FORMS_FOLDER = "forms"
+os.makedirs(SIGNATURES_FOLDER, exist_ok=True)
 os.makedirs(FORMS_FOLDER, exist_ok=True)
 
 # Keep-alive функция
@@ -35,6 +34,9 @@ def keep_alive():
 # Запускаем keep-alive в фоне
 threading.Thread(target=keep_alive, daemon=True).start()
 
+# =====================
+# ФУНКЦИИ ДЛЯ ПОДПИСЕЙ
+# =====================
 @app.route('/save_signature', methods=['POST', 'OPTIONS'])
 def save_signature():
     if request.method == 'OPTIONS':
@@ -91,8 +93,9 @@ def get_signature(filename):
         return send_file(filepath, mimetype='image/jpeg')
     return jsonify({'error': 'File not found'}), 404
 
-# ============= НОВЫЕ ФУНКЦИИ ДЛЯ ДАННЫХ ФОРМЫ =============
-
+# =====================
+# НОВЫЕ ФУНКЦИИ ДЛЯ ДАННЫХ ФОРМЫ
+# =====================
 @app.route('/save_form_data', methods=['POST', 'OPTIONS'])
 def save_form_data():
     """Сохраняет полные данные формы и возвращает ID сессии"""
@@ -101,6 +104,9 @@ def save_form_data():
     
     try:
         data = request.json
+        
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
         
         # Генерируем уникальный ID
         session_id = str(uuid.uuid4())
@@ -113,18 +119,21 @@ def save_form_data():
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         
-        # Файл будет удален после получения ботом, храним 1 час
+        print(f"✅ Данные формы сохранены: {session_id}")
+        
         # Запланируем удаление через 1 час
         def delete_later():
             time.sleep(3600)
             if os.path.exists(filepath):
                 os.remove(filepath)
+                print(f"🗑️ Удалены данные формы: {session_id}")
         
         threading.Thread(target=delete_later, daemon=True).start()
         
-        return jsonify({'session_id': session_id})
+        return jsonify({'session_id': session_id, 'status': 'ok'})
         
     except Exception as e:
+        print(f"❌ Ошибка сохранения формы: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/get_form_data/<session_id>', methods=['GET', 'OPTIONS'])
@@ -144,16 +153,48 @@ def get_form_data(session_id):
         
         # Удаляем файл после прочтения
         os.remove(filepath)
+        print(f"📤 Данные формы отправлены и удалены: {session_id}")
         
         return jsonify(data)
         
+    except Exception as e:
+        print(f"❌ Ошибка получения формы: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/get_form_stats', methods=['GET'])
+def get_form_stats():
+    """Возвращает статистику по сохраненным формам (для отладки)"""
+    try:
+        files = os.listdir(FORMS_FOLDER)
+        stats = {
+            'total_forms': len(files),
+            'forms': []
+        }
+        for f in files:
+            if f.endswith('.json'):
+                filepath = os.path.join(FORMS_FOLDER, f)
+                size = os.path.getsize(filepath)
+                modified = datetime.fromtimestamp(os.path.getmtime(filepath)).isoformat()
+                stats['forms'].append({
+                    'id': f.replace('.json', ''),
+                    'size': size,
+                    'modified': modified
+                })
+        return jsonify(stats)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({'status': 'ok'})
+    return jsonify({
+        'status': 'ok',
+        'signatures': len(os.listdir(SIGNATURES_FOLDER)),
+        'forms': len(os.listdir(FORMS_FOLDER))
+    })
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 10000))
+    print(f"🚀 Сервер запущен на порту {port}")
+    print(f"📁 Папка подписей: {SIGNATURES_FOLDER}")
+    print(f"📁 Папка форм: {FORMS_FOLDER}")
     app.run(host='0.0.0.0', port=port)
