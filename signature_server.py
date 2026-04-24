@@ -102,12 +102,32 @@ def save_form_data():
         return jsonify({}), 200
     
     try:
-        data = request.json
-        form_data = data.get('form_data')
+        # Получаем данные из запроса
+        data = request.get_json()
+        
+        # Проверяем, что данные получены
+        if not data:
+            print("❌ Нет данных в запросе")
+            return jsonify({'error': 'No data received'}), 400
+        
+        print(f"📥 Получены данные: {data.keys() if isinstance(data, dict) else type(data)}")
+        
+        # Извлекаем form_data (может быть в разных местах)
+        if 'form_data' in data:
+            form_data = data['form_data']
+        else:
+            form_data = data
         
         if not form_data:
-            return jsonify({'error': 'No form data'}), 400
+            print("❌ Нет form_data")
+            return jsonify({'error': 'No form_data'}), 400
         
+        # Проверяем обязательные поля
+        if not form_data.get('name'):
+            print("❌ Нет поля name")
+            return jsonify({'error': 'Missing required field: name'}), 400
+        
+        # Генерируем session_id
         session_id = str(uuid.uuid4())
         
         # Сохраняем данные
@@ -115,40 +135,26 @@ def save_form_data():
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(form_data, f, ensure_ascii=False, indent=2)
         
-        # Удаляем через 1 час
+        print(f"✅ Данные сохранены: {session_id}")
+        
+        # Запланируем удаление через 1 час
         def delete_later():
             time.sleep(3600)
             if os.path.exists(filepath):
                 os.remove(filepath)
+                print(f"🗑️ Удалены данные: {session_id}")
         
         threading.Thread(target=delete_later, daemon=True).start()
         
-        return jsonify({'session_id': session_id, 'status': 'ok'})
+        return jsonify({
+            'session_id': session_id,
+            'status': 'ok'
+        })
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/get_form_data/<session_id>', methods=['GET', 'OPTIONS'])
-def get_form_data(session_id):
-    """Получает данные формы по ID и удаляет"""
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-    
-    try:
-        filepath = os.path.join(FORMS_FOLDER, f"{session_id}.json")
-        
-        if not os.path.exists(filepath):
-            return jsonify({'error': 'Session not found or expired'}), 404
-        
-        with open(filepath, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
-        # Удаляем после прочтения
-        os.remove(filepath)
-        
-        return jsonify(data)
-        
-    except Exception as e:
+        print(f"❌ Ошибка: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @app.route('/health', methods=['GET'])
