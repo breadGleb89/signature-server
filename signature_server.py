@@ -4,6 +4,7 @@ import uuid
 import threading
 import requests
 import time
+import json
 from io import BytesIO
 from datetime import datetime
 from flask import Flask, request, jsonify, send_file
@@ -15,6 +16,10 @@ CORS(app)
 
 SIGNATURES_FOLDER = "signatures"
 os.makedirs(SIGNATURES_FOLDER, exist_ok=True)
+
+# Новая папка для данных форм
+FORMS_FOLDER = "forms"
+os.makedirs(FORMS_FOLDER, exist_ok=True)
 
 # Keep-alive функция
 def keep_alive():
@@ -85,6 +90,65 @@ def get_signature(filename):
     if os.path.exists(filepath):
         return send_file(filepath, mimetype='image/jpeg')
     return jsonify({'error': 'File not found'}), 404
+
+# ============= НОВЫЕ ФУНКЦИИ ДЛЯ ДАННЫХ ФОРМЫ =============
+
+@app.route('/save_form_data', methods=['POST', 'OPTIONS'])
+def save_form_data():
+    """Сохраняет полные данные формы и возвращает ID сессии"""
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    
+    try:
+        data = request.json
+        
+        # Генерируем уникальный ID
+        session_id = str(uuid.uuid4())
+        
+        # Добавляем временную метку
+        data['created_at'] = datetime.now().isoformat()
+        
+        # Сохраняем в JSON файл
+        filepath = os.path.join(FORMS_FOLDER, f"{session_id}.json")
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        
+        # Файл будет удален после получения ботом, храним 1 час
+        # Запланируем удаление через 1 час
+        def delete_later():
+            time.sleep(3600)
+            if os.path.exists(filepath):
+                os.remove(filepath)
+        
+        threading.Thread(target=delete_later, daemon=True).start()
+        
+        return jsonify({'session_id': session_id})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/get_form_data/<session_id>', methods=['GET', 'OPTIONS'])
+def get_form_data(session_id):
+    """Получает данные формы по ID сессии и удаляет файл"""
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    
+    try:
+        filepath = os.path.join(FORMS_FOLDER, f"{session_id}.json")
+        
+        if not os.path.exists(filepath):
+            return jsonify({'error': 'Session not found or expired'}), 404
+        
+        with open(filepath, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        # Удаляем файл после прочтения
+        os.remove(filepath)
+        
+        return jsonify(data)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/health', methods=['GET'])
 def health():
