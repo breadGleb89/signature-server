@@ -96,60 +96,38 @@ def get_signature(filename):
 # ХРАНЕНИЕ ДАННЫХ ФОРМЫ
 # =====================
 @app.route('/save_form_data', methods=['POST', 'OPTIONS'])
+@app.route('/save_form_data', methods=['POST', 'OPTIONS'])
 def save_form_data():
-    """Сохраняет данные формы и возвращает ID"""
     if request.method == 'OPTIONS':
         return jsonify({}), 200
     
     try:
-        # Получаем данные из запроса
-        data = request.get_json()
+        # Проверяем, что папка существует
+        print(f"📁 FORMS_FOLDER: {os.path.abspath(FORMS_FOLDER)}")
+        print(f"📁 Папка существует: {os.path.exists(FORMS_FOLDER)}")
         
-        # Проверяем, что данные получены
-        if not data:
-            print("❌ Нет данных в запросе")
-            return jsonify({'error': 'No data received'}), 400
+        # Если нет - создаем
+        if not os.path.exists(FORMS_FOLDER):
+            os.makedirs(FORMS_FOLDER, exist_ok=True)
+            print(f"📁 Папка создана принудительно")
         
-        print(f"📥 Получены данные: {data.keys() if isinstance(data, dict) else type(data)}")
-        
-        # Извлекаем form_data (может быть в разных местах)
-        if 'form_data' in data:
-            form_data = data['form_data']
-        else:
-            form_data = data
+        data = request.json
+        form_data = data.get('form_data')
         
         if not form_data:
-            print("❌ Нет form_data")
             return jsonify({'error': 'No form_data'}), 400
         
-        # Проверяем обязательные поля
-        if not form_data.get('name'):
-            print("❌ Нет поля name")
-            return jsonify({'error': 'Missing required field: name'}), 400
-        
-        # Генерируем session_id
         session_id = str(uuid.uuid4())
-        
-        # Сохраняем данные
         filepath = os.path.join(FORMS_FOLDER, f"{session_id}.json")
+        
+        print(f"💾 Сохраняем в: {filepath}")
+        
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(form_data, f, ensure_ascii=False, indent=2)
         
-        print(f"✅ Данные сохранены: {session_id}")
+        print(f"✅ Файл создан, размер: {os.path.getsize(filepath)} байт")
         
-        # Запланируем удаление через 1 час
-        def delete_later():
-            time.sleep(3600)
-            if os.path.exists(filepath):
-                os.remove(filepath)
-                print(f"🗑️ Удалены данные: {session_id}")
-        
-        threading.Thread(target=delete_later, daemon=True).start()
-        
-        return jsonify({
-            'session_id': session_id,
-            'status': 'ok'
-        })
+        return jsonify({'session_id': session_id, 'status': 'ok'})
         
     except Exception as e:
         print(f"❌ Ошибка: {e}")
