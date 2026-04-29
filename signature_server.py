@@ -96,17 +96,14 @@ def get_signature(filename):
 # ХРАНЕНИЕ ДАННЫХ ФОРМЫ
 # =====================
 @app.route('/save_form_data', methods=['POST', 'OPTIONS'])
-@app.route('/save_form_data', methods=['POST', 'OPTIONS'])
 def save_form_data():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
     
     try:
-        # Проверяем, что папка существует
         print(f"📁 FORMS_FOLDER: {os.path.abspath(FORMS_FOLDER)}")
         print(f"📁 Папка существует: {os.path.exists(FORMS_FOLDER)}")
         
-        # Если нет - создаем
         if not os.path.exists(FORMS_FOLDER):
             os.makedirs(FORMS_FOLDER, exist_ok=True)
             print(f"📁 Папка создана принудительно")
@@ -133,6 +130,33 @@ def save_form_data():
         print(f"❌ Ошибка: {e}")
         import traceback
         traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+# =====================
+# ПОЛУЧЕНИЕ ДАННЫХ ФОРМЫ (ДОБАВИТЬ!)
+# =====================
+@app.route('/get_form_data/<session_id>', methods=['GET', 'OPTIONS'])
+def get_form_data(session_id):
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    
+    try:
+        filepath = os.path.join(FORMS_FOLDER, f"{session_id}.json")
+        
+        if not os.path.exists(filepath):
+            return jsonify({'error': 'Session not found or expired'}), 404
+        
+        with open(filepath, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        # Удаляем после прочтения
+        os.remove(filepath)
+        print(f"📤 Данные отправлены и удалены: {session_id}")
+        
+        return jsonify(data)
+        
+    except Exception as e:
+        print(f"❌ Ошибка: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/health', methods=['GET'])
