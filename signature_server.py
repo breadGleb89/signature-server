@@ -77,7 +77,7 @@ def save_signature():
         filepath = os.path.join(SIGNATURES_FOLDER, filename)
         img.save(filepath, 'JPEG', quality=70, optimize=True)
         
-        base_url = os.environ.get('BASE_URL', 'https://signature-server-87mz.onrender.com')
+        base_url = os.environ.get('BASE_URL', 'https://signature-server-1.onrender.com')
         image_url = f"{base_url}/get_signature/{filename}"
         
         return jsonify({'status': 'ok', 'url': image_url})
