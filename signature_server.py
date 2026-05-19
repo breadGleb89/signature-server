@@ -21,7 +21,7 @@ os.makedirs(FORMS_FOLDER, exist_ok=True)
 
 # Keep-alive функция
 def keep_alive():
-    url = "https://signature-server-87mz.onrender.com/health"
+    url = "https://signature-server-1.onrender.com/health"
     while True:
         time.sleep(600)
         try:
